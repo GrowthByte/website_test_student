@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐦 앵그리버드 이차함수 게임</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    min-height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:'Malgun Gothic','Noto Sans KR',sans-serif;
+    user-select:none; padding:12px; overflow:hidden;
+  }
+  #title { text-align:center; margin-bottom:8px; }
+  #title h1 {
+    color:#FFD700; font-size:clamp(16px,3vw,24px); font-weight:900;
+    text-shadow:0 2px 8px rgba(255,200,0,.5);
+  }
+  #title p { color:#a0c4ff; font-size:12px; margin-top:3px; }
+  #statusBar {
+    display:flex; gap:16px; margin-bottom:7px;
+    background:rgba(255,255,255,.08); border-radius:8px;
+    padding:5px 18px; flex-wrap:wrap; justify-content:center;
+    color:#cde; font-size:13px;
+  }
+  #statusBar strong.y  { color:#FFD700; }
+  #statusBar strong.g  { color:#4eff91; }
+  #statusBar strong.o  { color:#ff8c69; }
+  #statusBar .badge {
+    color:#FFD700; font-size:12px;
+    background:rgba(255,215,0,.12); border-radius:4px; padding:1px 7px;
+  }
+  #canvasWrap {
+    position:relative; border:3px solid rgba(255,255,255,.18);
+    border-radius:12px; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.6);
+  }
+  canvas { display:block; max-width:100%; touch-action:none; }
+  .overlay {
+    position:absolute; inset:0;
+    background:rgba(0,0,0,.65); backdrop-filter:blur(4px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; color:white;
+  }
+  .overlay h2 { font-size:26px; font-weight:900; }
+  .overlay p  { font-size:13px; text-align:center; line-height:1.7; max-width:380px; }
+  .btn {
+    border-radius:10px; color:#1a1a2e; font-weight:900; font-size:14px;
+    padding:10px 24px; cursor:pointer; border-width:2px; border-style:solid;
+    box-shadow:0 4px 12px rgba(0,0,0,.3);
+  }
+  #footer { color:rgba(160,196,255,.3); font-size:10px; margin-top:9px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="title">
+  <h1>🐦 앵그리버드 이차함수 게임</h1>
+  <p>새를 당겨서 발사 — 3라운드부터 건물이 등장합니다!</p>
+</div>
+
+<div id="statusBar" class="hidden">
+  <span>🎯 라운드 <strong class="y" id="sRound">1</strong>/<strong class="y">5</strong></span>
+  <span>⭐ <strong class="g" id="sHits">0</strong>번 성공</span>
+  <span>🐷 X = <strong class="o" id="sPigX">-</strong></span>
+  <span class="badge" id="sBadge">장애물 없음</span>
+</div>
+
+<div id="canvasWrap">
+  <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+  <!-- overlays -->
+  <div class="overlay" id="ovStart">
+    <div style="font-size:52px">🐦</div>
+    <h2 style="color:#FFD700">앵그리버드 수학 게임</h2>
+    <p style="color:#cde">
+      새를 <strong style="color:#FFD700">클릭해서 당긴 뒤 놓으면</strong> 발사!<br>
+      포물선 궤적 = <span style="color:#FF8C69">이차함수</span> y = a(x−p)²+q<br>
+      <span style="color:#aef">1~2라운드</span>: 장애물 없음 &nbsp;|&nbsp;
+      <span style="color:#ffa">3~5라운드</span>: 건물 등장! 🏠
+    </p>
+    <button class="btn" style="background:#FFD700;border-color:#b8860b" onclick="startGame()">🎮 게임 시작!</button>
+  </div>
+
+  <div class="overlay hidden" id="ovHit">
+    <div style="font-size:58px">🎉</div>
+    <h2 style="color:#4eff91">명중!</h2>
+    <p style="color:#cde" id="hitMsg"></p>
+    <button class="btn" style="background:#4eff91;border-color:#00a651" onclick="nextRound(true)" id="hitBtn">➡ 다음 라운드</button>
+  </div>
+
+  <div class="overlay hidden" id="ovMiss">
+    <div style="font-size:46px">😤</div>
+    <h2 style="color:#ff6b6b">빗나갔습니다!</h2>
+    <p style="color:#cde" id="missMsg"></p>
+    <button class="btn" style="background:#ff6b6b;border-color:#c0392b" onclick="nextRound(false)" id="missBtn">➡ 다음 라운드</button>
+  </div>
+
+  <div class="overlay hidden" id="ovGameover">
+    <div style="font-size:52px" id="goEmoji">🏆</div>
+    <h2 style="color:#FFD700">게임 종료!</h2>
+    <p style="color:#cde; font-size:16px" id="goScore"></p>
+    <p style="color:#a0c4ff; font-size:12px; text-align:center; max-width:300px" id="goMsg"></p>
+    <button class="btn" style="background:#FFD700;border-color:#b8860b" onclick="restartGame()">🔄 다시 하기</button>
+  </div>
+</div>
+
+<p id="footer">고1 수학 — 포물선 운동 = 이차함수 y = a(x−p)²+q | 드래그로 발사 | 5라운드</p>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const CW=800, CH=500, GY=280, OX=400;
+const SLING_CX=100, SLING_CY=GY-68;
+const GRAVITY=0.32, POWER=0.28, MAX_PULL=110, BIRD_R=15, HIT_R=26;
+const TOTAL=5, DS=10;
+
+// ─── Coord helpers ────────────────────────────────────────────────────────────
+const toCX=gx=>OX+gx, toCY=gy=>GY-gy;
+const toGX=cx=>cx-OX,  toGY=cy=>GY-cy;
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let phase='start'; // start|aiming|animating|hit|miss|gameover
+let round=1, hits=0, pigX=180, equation='';
+let dragging=false, birdCX=SLING_CX, birdCY=SLING_CY;
+let cloudOff=0, animId=0;
+let aGX=0,aGY=0,aVX=0,aVY=0,aPigX=180,aPigGY=17;
+let blocks=[];
+
+// ─── Block helpers ────────────────────────────────────────────────────────────
+function mkBlock(gx,gy,w,h,type){return{gx,gy,w,h,type,alive:true,shakeT:0};}
+function generateBlocks(r,pgx){
+  if(r<3)return[];
+  if(r===3){const wx=pgx-75;return[mkBlock(wx,0,38,36,'wood'),mkBlock(wx,36,38,36,'wood')];}
+  if(r===4){const w1=pgx-130,w2=pgx-65;return[
+    mkBlock(w1,0,38,36,'wood'),mkBlock(w1,36,38,36,'wood'),
+    mkBlock(w2,0,42,36,'stone'),mkBlock(w2,36,42,36,'stone'),mkBlock(w2,72,42,36,'stone')];}
+  const w1=pgx-160,w2=pgx-95,w3=pgx-30;
+  return[
+    mkBlock(w1,0,38,36,'wood'),mkBlock(w1,36,38,36,'wood'),mkBlock(w1,72,38,36,'wood'),
+    mkBlock(w2,0,42,36,'stone'),mkBlock(w2,36,42,36,'stone'),
+    mkBlock(w3,0,42,36,'stone'),mkBlock(w3,36,42,36,'stone'),mkBlock(w3,72,42,36,'stone')];
+}
+function pigCenterGY(r,blks){
+  if(r<5)return 17;
+  const col=blks.filter(b=>b.gx>=350&&b.alive);
+  if(!col.length)return 17;
+  return Math.max(...col.map(b=>b.gy+b.h))+17;
+}
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+
+function drawSky(){
+  const g=ctx.createLinearGradient(0,0,0,GY);
+  g.addColorStop(0,'#3a7bbf'); g.addColorStop(1,'#9dd8f5');
+  ctx.fillStyle=g; ctx.fillRect(0,0,CW,GY);
+}
+function drawGround(){
+  const g=ctx.createLinearGradient(0,GY,0,CH);
+  g.addColorStop(0,'#5aaa38'); g.addColorStop(.2,'#4a8a28'); g.addColorStop(1,'#38701c');
+  ctx.fillStyle=g; ctx.fillRect(0,GY,CW,CH-GY);
+  ctx.strokeStyle='#72cc48'; ctx.lineWidth=2;
+  for(let x=0;x<CW;x+=28){
+    ctx.beginPath(); ctx.moveTo(x,GY);
+    ctx.quadraticCurveTo(x+14,GY-5,x+28,GY); ctx.stroke();
+  }
+}
+function drawCloud(x,y,s=1){
+  ctx.fillStyle='rgba(255,255,255,0.82)';
+  const b=(dx,dy,r)=>{ctx.beginPath();ctx.arc(x+dx*s,y+dy*s,r*s,0,Math.PI*2);ctx.fill();};
+  b(0,0,20);b(26,-5,16);b(-22,-3,14);b(12,9,13);b(-9,9,13);
+}
+function drawSlingshot(){
+  ctx.strokeStyle='#7a3a0e'; ctx.lineWidth=9; ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(SLING_CX,GY);ctx.lineTo(SLING_CX,GY-58);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(SLING_CX,GY-42);ctx.lineTo(SLING_CX-20,GY-68);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(SLING_CX,GY-42);ctx.lineTo(SLING_CX+20,GY-68);ctx.stroke();
+}
+function drawBand(bx,by){
+  ctx.strokeStyle='#b06020'; ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(SLING_CX-20,SLING_CY);ctx.lineTo(bx,by);
+  ctx.moveTo(SLING_CX+20,SLING_CY);ctx.lineTo(bx,by);
+  ctx.stroke();
+}
+function drawBird(cx,cy,r=BIRD_R){
+  const g=ctx.createRadialGradient(cx-4,cy-4,2,cx,cy,r);
+  g.addColorStop(0,'#ff7070');g.addColorStop(1,'#cc0000');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#900';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='white';ctx.beginPath();ctx.arc(cx+5,cy-5,5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(cx+6,cy-5,2.3,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#222';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(cx+1,cy-10);ctx.lineTo(cx+10,cy-8);ctx.stroke();
+  ctx.fillStyle='#f0a000';
+  ctx.beginPath();ctx.moveTo(cx+11,cy-1);ctx.lineTo(cx+20,cy+1);ctx.lineTo(cx+11,cy+5);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#dd0000';
+  for(let i=-1;i<=1;i++){ctx.beginPath();ctx.ellipse(cx+i*5,cy-r-1,3,6,i*0.3,0,Math.PI*2);ctx.fill();}
+}
+function drawPig(cx,cy,alive){
+  const col=alive?'#5db85d':'#888',dark=alive?'#3d8030':'#555';
+  const g=ctx.createRadialGradient(cx-4,cy-4,2,cx,cy,17);
+  g.addColorStop(0,alive?'#80e080':'#aaa');g.addColorStop(1,col);
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,17,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=dark;ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle=alive?'#80c980':'#999';
+  ctx.beginPath();ctx.ellipse(cx+1,cy+6,8,5.5,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=dark;ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle=dark;
+  ctx.beginPath();ctx.arc(cx-2,cy+6,1.6,0,Math.PI*2);ctx.arc(cx+4,cy+6,1.6,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='white';
+  ctx.beginPath();ctx.arc(cx-5,cy-5,4.5,0,Math.PI*2);ctx.arc(cx+5,cy-5,4.5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath();ctx.arc(cx-4.5,cy-5,2.2,0,Math.PI*2);ctx.arc(cx+5.5,cy-5,2.2,0,Math.PI*2);ctx.fill();
+  if(!alive){
+    ctx.strokeStyle='#111';ctx.lineWidth=2;
+    for(const ox of[-5,5]){
+      ctx.beginPath();ctx.moveTo(cx+ox-3,cy-8);ctx.lineTo(cx+ox+3,cy-2);
+      ctx.moveTo(cx+ox+3,cy-8);ctx.lineTo(cx+ox-3,cy-2);ctx.stroke();
+    }
+  }
+  ctx.fillStyle=col;
+  ctx.beginPath();ctx.arc(cx-14,cy-12,5.5,0,Math.PI*2);ctx.arc(cx+14,cy-12,5.5,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=dark;ctx.lineWidth=1.5;ctx.stroke();
+}
+function drawBlock(b){
+  if(!b.alive)return;
+  const cx=toCX(b.gx), cy=toCY(b.gy+b.h), cw=b.w, ch=b.h;
+  const shake=b.shakeT>0?(Math.random()-.5)*4:0;
+  ctx.save();ctx.translate(shake,shake*.5);
+  if(b.type==='wood'){
+    const g=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
+    g.addColorStop(0,'#c8893a');g.addColorStop(.5,'#a0681c');g.addColorStop(1,'#8a5512');
+    ctx.fillStyle=g;ctx.fillRect(cx,cy,cw,ch);
+    ctx.strokeStyle='rgba(60,30,5,.3)';ctx.lineWidth=1.5;
+    for(let i=1;i<3;i++){const ly=cy+ch/3*i;ctx.beginPath();ctx.moveTo(cx+2,ly);ctx.lineTo(cx+cw-2,ly);ctx.stroke();}
+    ctx.strokeStyle='rgba(200,150,80,.5)';ctx.lineWidth=1;ctx.strokeRect(cx+1,cy+1,cw-2,ch-2);
+  } else {
+    const g=ctx.createLinearGradient(cx,cy,cx,cy+ch);
+    g.addColorStop(0,'#9aa0a8');g.addColorStop(1,'#6a7078');
+    ctx.fillStyle=g;ctx.fillRect(cx,cy,cw,ch);
+    const mid=cy+ch/2;
+    ctx.strokeStyle='rgba(50,55,60,.4)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(cx,mid);ctx.lineTo(cx+cw,mid);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+cw/2,cy);ctx.lineTo(cx+cw/2,mid);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+cw/4,mid);ctx.lineTo(cx+cw/4,cy+ch);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+3*cw/4,mid);ctx.lineTo(cx+3*cw/4,cy+ch);ctx.stroke();
+    ctx.strokeStyle='rgba(200,210,220,.3)';ctx.lineWidth=1;ctx.strokeRect(cx+1,cy+1,cw-2,ch-2);
+  }
+  ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;ctx.strokeRect(cx,cy,cw,ch);
+  ctx.restore();
+}
+function drawTrajPreview(sgx,sgy,vx,vy){
+  ctx.save();ctx.setLineDash([7,5]);ctx.strokeStyle='rgba(255,230,80,.65)';ctx.lineWidth=2.5;
+  ctx.beginPath();let first=true;
+  for(let t=0;t<200;t+=2){
+    const gx=sgx+vx*t, gy=sgy+vy*t-.5*GRAVITY*t*t;
+    if(gy<-50)break;
+    const cx2=toCX(gx),cy2=toCY(gy);
+    if(first){ctx.moveTo(cx2,cy2);first=false;}else ctx.lineTo(cx2,cy2);
+  }
+  ctx.stroke();ctx.restore();
+}
+function drawEquationBox(p,q,a){
+  const pD=Math.round(p),qD=Math.round(q);
+  const bw=240,bh=68,bx=10,by=10;
+  ctx.save();
+  ctx.fillStyle='rgba(10,15,40,.88)';ctx.strokeStyle='rgba(255,215,0,.5)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.roundRect(bx,by,bw,bh,8);ctx.fill();ctx.stroke();
+  ctx.textAlign='left';
+  ctx.font='bold 11px monospace';ctx.fillStyle='#a0c4ff';
+  ctx.fillText('🧮 이차함수 (실시간)',bx+10,by+18);
+  ctx.font='bold 13px monospace';ctx.fillStyle='#FFD700';
+  ctx.fillText(`y = ${a.toFixed(3)}(x \u2212 ${pD})\u00B2 + ${qD}`,bx+10,by+36);
+  ctx.font='10px monospace';ctx.fillStyle='rgba(160,196,255,.65)';
+  ctx.fillText(`꼭짓점: (${pD}, ${qD})   a = ${a.toFixed(3)}`,bx+10,by+54);
+  ctx.restore();
+}
+function drawEquationFixed(eq){
+  const bw=260,bh=46,bx=CW-bw-10,by=8;
+  ctx.save();
+  ctx.fillStyle='rgba(10,15,40,.85)';ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.roundRect(bx,by,bw,bh,8);ctx.fill();ctx.stroke();
+  ctx.textAlign='left';
+  ctx.font='10px monospace';ctx.fillStyle='#a0c4ff';ctx.fillText('🧮 이차함수:',bx+10,by+16);
+  ctx.font='12px monospace';ctx.fillStyle='#FFD700';ctx.fillText(eq,bx+10,by+34);
+  ctx.restore();
+}
+function drawAimHint(){
+  const bw=190,bh=36,bx=CW-bw-10,by=8;
+  ctx.save();
+  ctx.fillStyle='rgba(10,15,40,.82)';ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.roundRect(bx,by,bw,bh,8);ctx.fill();ctx.stroke();
+  ctx.textAlign='left';ctx.font='10px monospace';
+  ctx.fillStyle='rgba(160,196,255,.7)';ctx.fillText('새를 잡아당겨 발사하세요!',bx+10,by+15);
+  ctx.fillStyle='rgba(255,200,80,.7)';
+  if(round>=3)ctx.fillText('💡 건물을 뚫고 지나갈 수 있어요',bx+10,by+29);
+  else ctx.fillText('← 왼쪽 아래로 당길수록 멀리',bx+10,by+29);
+  ctx.restore();
+}
+
+function drawScene(){
+  ctx.clearRect(0,0,CW,CH);
+  drawSky();
+  const off=cloudOff;
+  drawCloud(((60+off)%900)-60,55,.9);
+  drawCloud(((280+off)%900)-60,38,1.1);
+  drawCloud(((540+off)%900)-60,65,.85);
+  drawCloud(((740+off)%900)-60,45,1.0);
+  drawGround();
+
+  // Axis
+  ctx.fillStyle='rgba(0,0,0,.2)';ctx.font='10px monospace';ctx.textAlign='center';
+  ctx.strokeStyle='rgba(0,0,0,.07)';ctx.lineWidth=1;ctx.setLineDash([3,5]);
+  for(let gx=-300;gx<=400;gx+=100){
+    const cx=toCX(gx);
+    ctx.beginPath();ctx.moveTo(cx,18);ctx.lineTo(cx,GY);ctx.stroke();
+    ctx.fillText(String(gx/DS),cx,GY+16);
+  }
+  ctx.setLineDash([]);
+
+  drawSlingshot();
+  blocks.forEach(b=>{if(b.shakeT>0)b.shakeT--;drawBlock(b);});
+
+  // Pig
+  const pCX=toCX(aPigX), pCY=toCY(aPigGY);
+  if(phase!=='start') drawPig(pCX,pCY,phase!=='hit');
+
+  // Phase drawing
+  if(phase==='start'){
+    drawBand(SLING_CX,SLING_CY);drawBird(SLING_CX,SLING_CY);
+  } else if(phase==='aiming'){
+    drawBand(birdCX,birdCY);
+    const pullX=birdCX-SLING_CX, pullY=birdCY-SLING_CY;
+    const vx=-pullX*POWER, vy=pullY*POWER;
+    const pulling=Math.abs(pullX)+Math.abs(pullY)>12;
+    if(pulling){
+      drawTrajPreview(toGX(birdCX),toGY(birdCY),vx,vy);
+      const x0=toGX(birdCX),y0=toGY(birdCY);
+      const tPeak=vy/GRAVITY;
+      const p=(x0+vx*tPeak)/DS, q=(y0+vy*tPeak-.5*GRAVITY*tPeak*tPeak)/DS;
+      const a=vx!==0?(-GRAVITY/(2*vx*vx))*DS*DS:0;
+      drawEquationBox(p,q,a);
+    } else {
+      drawAimHint();
+    }
+    drawBird(birdCX,birdCY);
+  } else if(phase==='animating'){
+    drawTrajPreview(toGX(SLING_CX),toGY(SLING_CY),aVX,aVY);
+    drawBird(toCX(aGX),toCY(aGY));
+    if(equation) drawEquationFixed(equation);
+  } else if(phase==='hit'){
+    drawBird(pCX-2,pCY-2);
+    const t=Date.now()/280;
+    for(let i=0;i<9;i++){
+      const angle=i/9*Math.PI*2+t, dist=30+Math.sin(t*3+i)*9;
+      ctx.fillStyle=['#FFD700','#FFA500','#FF6347','#FFE44D','#FF8C00'][i%5];
+      ctx.beginPath();ctx.arc(pCX+Math.cos(angle)*dist,pCY+Math.sin(angle)*dist,5.5,0,Math.PI*2);ctx.fill();
+    }
+    if(equation) drawEquationFixed(equation);
+  } else if(phase==='miss'){
+    drawBird(Math.min(toCX(aGX),CW+20),toCY(0)-15);
+    if(equation) drawEquationFixed(equation);
+  }
+}
+
+// ─── Animation tick ───────────────────────────────────────────────────────────
+function tick(){
+  aGX+=aVX; aGY+=aVY-.5*GRAVITY; aVY-=GRAVITY;
+
+  // block collision
+  for(const b of blocks){
+    if(!b.alive)continue;
+    const inX=aGX+BIRD_R>b.gx&&aGX-BIRD_R<b.gx+b.w;
+    const inY=aGY+BIRD_R>b.gy&&aGY-BIRD_R<b.gy+b.h;
+    if(inX&&inY){
+      b.alive=false; aVX*=.75; aVY*=.6;
+      for(const nb of blocks)if(nb.alive&&Math.abs(nb.gx-b.gx)<50&&Math.abs(nb.gy-b.gy)<50)nb.shakeT=8;
+      if(round===5)aPigGY=pigCenterGY(round,blocks);
+    }
+  }
+
+  const bCX=toCX(aGX),bCY=toCY(aGY);
+  const pCX=toCX(aPigX),pCY=toCY(aPigGY);
+  if(Math.hypot(bCX-pCX,bCY-pCY)<HIT_R){setPhase('hit');return;}
+  if(aGY<-20&&aGX>0){setPhase('miss');return;}
+  if(aGX>450){setPhase('miss');return;}
+
+  drawScene();
+  animId=requestAnimationFrame(tick);
+}
+
+// ─── Idle loop ────────────────────────────────────────────────────────────────
+let idleId=0;
+function idleLoop(){
+  cloudOff=(cloudOff+.18)%900;
+  if(phase!=='animating')drawScene();
+  idleId=requestAnimationFrame(idleLoop);
+}
+idleLoop();
+
+// ─── Phase management ─────────────────────────────────────────────────────────
+function showOverlay(id){
+  ['ovStart','ovHit','ovMiss','ovGameover'].forEach(i=>document.getElementById(i).classList.add('hidden'));
+  if(id)document.getElementById(id).classList.remove('hidden');
+}
+function setPhase(p){
+  phase=p;
+  if(animId){cancelAnimationFrame(animId);animId=0;}
+  showOverlay(p==='start'?'ovStart':p==='hit'?'ovHit':p==='miss'?'ovMiss':p==='gameover'?'ovGameover':null);
+
+  if(p==='hit'){
+    document.getElementById('hitMsg').innerHTML=
+      `${round>=3?'건물을 뚫고 돼지를 맞췄어요! 👏':'완벽한 포물선 궤적이었습니다!'}<br>
+       <span style="color:#FFD700;font-size:11px;font-family:monospace">${equation}</span>`;
+    document.getElementById('hitBtn').textContent=round>=TOTAL?'🏆 결과 보기':'➡ 다음 라운드';
+  }
+  if(p==='miss'){
+    document.getElementById('missMsg').innerHTML=
+      `돼지 X = <strong style="color:#ff8c69">${Math.round(aPigX/DS)}</strong> ${round>=3?'| 건물을 넘거나 뚫어보세요!':''}<br>
+       <span style="color:rgba(255,210,70,.7);font-size:10px;font-family:monospace">${equation}</span>`;
+    document.getElementById('missBtn').textContent=round>=TOTAL?'🏆 결과 보기':'➡ 다음 라운드';
+  }
+  if(p==='gameover'){
+    const h=hits;
+    document.getElementById('goEmoji').textContent=h>=4?'🏆':h>=3?'🎖️':h>=2?'🥈':'📚';
+    document.getElementById('goScore').innerHTML=`${TOTAL}라운드 중 <strong style="color:#4eff91;font-size:22px">${h}</strong>번 성공!`;
+    document.getElementById('goMsg').textContent=
+      h===5?'이차함수 + 물리 마스터! 천재! 🎓':
+      h>=4?'훌륭해요! 건물도 척척 뚫었군요! 🏗️':
+      h>=3?'포물선 운동을 잘 이해하고 있어요!':
+      h>=2?'조금 더 연습하면 건물도 뚫을 수 있어요!':
+      '더 당길수록 멀리, 각도를 높이면 더 높이 날아요! 💪';
+  }
+
+  updateStatus();
+}
+
+function updateStatus(){
+  const bar=document.getElementById('statusBar');
+  if(phase==='start'||phase==='gameover'){bar.classList.add('hidden');return;}
+  bar.classList.remove('hidden');
+  document.getElementById('sRound').textContent=round;
+  document.getElementById('sHits').textContent=hits;
+  document.getElementById('sPigX').textContent=Math.round(aPigX/DS);
+  const labels=['장애물 없음','장애물 없음','🪵 나무 벽','🪵🪨 나무+돌 벽','🏰 요새'];
+  document.getElementById('sBadge').textContent=labels[round-1]||'🏰 요새';
+}
+
+// ─── Spawn ────────────────────────────────────────────────────────────────────
+function spawnRound(r){
+  const x=Math.floor(Math.random()*220)+100;
+  blocks=generateBlocks(r,x);
+  aPigX=x; aPigGY=r===5?pigCenterGY(r,blocks):17;
+  pigX=x;
+  return x;
+}
+
+// ─── Game flow ────────────────────────────────────────────────────────────────
+function startGame(){
+  birdCX=SLING_CX; birdCY=SLING_CY;
+  round=1; hits=0;
+  spawnRound(1);
+  setPhase('aiming');
+}
+function nextRound(wasHit){
+  if(wasHit)hits++;
+  if(round>=TOTAL){setPhase('gameover');return;}
+  round++;
+  birdCX=SLING_CX; birdCY=SLING_CY;
+  spawnRound(round);
+  setPhase('aiming');
+}
+function restartGame(){
+  birdCX=SLING_CX; birdCY=SLING_CY;
+  round=1; hits=0;
+  spawnRound(1);
+  setPhase('aiming');
+}
+
+// ─── Fire bird ───────────────────────────────────────────────────────────────
+function fireBird(){
+  const pullX=birdCX-SLING_CX, pullY=birdCY-SLING_CY;
+  if(Math.abs(pullX)+Math.abs(pullY)<12)return;
+  const vx=-pullX*POWER, vy=pullY*POWER;
+  aGX=toGX(birdCX); aGY=toGY(birdCY);
+  aVX=vx; aVY=vy;
+  const x0=aGX,y0=aGY,tPeak=vy/GRAVITY;
+  const pD=Math.round((x0+vx*tPeak)/DS), qD=Math.round((y0+vy*tPeak-.5*GRAVITY*tPeak*tPeak)/DS);
+  const aD=(-GRAVITY/(2*vx*vx))*DS*DS;
+  equation=`y = ${aD.toFixed(3)}(x \u2212 ${pD})\u00B2 + ${qD}`;
+  setPhase('animating');
+  animId=requestAnimationFrame(tick);
+}
+
+// ─── Pointer events ───────────────────────────────────────────────────────────
+function getPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
+  let cx,cy;
+  if(e.touches){cx=e.touches[0]?.clientX??e.changedTouches[0].clientX;cy=e.touches[0]?.clientY??e.changedTouches[0].clientY;}
+  else{cx=e.clientX;cy=e.clientY;}
+  return{x:(cx-rect.left)*sx,y:(cy-rect.top)*sy};
+}
+canvas.addEventListener('mousedown',e=>{
+  if(phase!=='aiming')return;
+  const p=getPos(e);
+  if(Math.hypot(p.x-birdCX,p.y-birdCY)<38)dragging=true;
+},{passive:false});
+canvas.addEventListener('mousemove',e=>{
+  if(!dragging||phase!=='aiming')return;
+  const p=getPos(e);
+  const dx=p.x-SLING_CX,dy=p.y-SLING_CY,dist=Math.hypot(dx,dy);
+  const clamp=Math.min(dist,MAX_PULL),ratio=clamp/(dist||1);
+  birdCX=SLING_CX+dx*ratio; birdCY=SLING_CY+dy*ratio;
+},{passive:false});
+canvas.addEventListener('mouseup',e=>{
+  if(!dragging||phase!=='aiming')return;
+  dragging=false; fireBird();
+});
+canvas.addEventListener('mouseleave',e=>{
+  if(!dragging||phase!=='aiming')return;
+  dragging=false; fireBird();
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(phase!=='aiming')return;
+  const p=getPos(e);
+  if(Math.hypot(p.x-birdCX,p.y-birdCY)<38)dragging=true;
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(!dragging||phase!=='aiming')return;
+  const p=getPos(e);
+  const dx=p.x-SLING_CX,dy=p.y-SLING_CY,dist=Math.hypot(dx,dy);
+  const clamp=Math.min(dist,MAX_PULL),ratio=clamp/(dist||1);
+  birdCX=SLING_CX+dx*ratio; birdCY=SLING_CY+dy*ratio;
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(!dragging||phase!=='aiming')return;
+  dragging=false; fireBird();
+},{passive:false});
+
+// cursor
+canvas.addEventListener('mousemove',()=>{canvas.style.cursor=phase==='aiming'?'crosshair':'default';});
+</script>
+</body>
+</html>
